@@ -1,0 +1,18 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include .env.example
+recursive-include src/tigo_mcp_server *.py
+include src/tigo_mcp_server/py.typed
+recursive-include tests *.py
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store
+global-exclude *.egg-info/*
+global-exclude build/*
+global-exclude dist/*
+global-exclude .git/*
+global-exclude .pytest_cache/*
+global-exclude .mypy_cache/*
+global-exclude .coverage
+global-exclude .env

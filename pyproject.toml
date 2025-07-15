@@ -1,13 +1,168 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "tigo-mcp-server"
 version = "0.1.0"
-description = "Tigo MCP Server"
+description = "Model Context Protocol server for Tigo Energy solar system monitoring and analytics"
 readme = "README.md"
-requires-python = ">=3.13"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Matt Dreyer", email = "matt_dreyer@hotmail.com"}
+]
+maintainers = [
+    {name = "Matt Dreyer", email = "matt_dreyer@hotmail.com"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: System :: Monitoring",
+    "Topic :: Home Automation",
+    "Topic :: Scientific/Engineering",
+    "Environment :: Console",
+    "Framework :: AsyncIO",
+]
+keywords = [
+    "mcp", 
+    "tigo", 
+    "solar", 
+    "energy", 
+    "monitoring", 
+    "model-context-protocol",
+    "renewable-energy",
+    "photovoltaic",
+    "ai-tools",
+    "claude",
+    "llm"
+]
+requires-python = ">=3.8"
 dependencies = [
-    "mcp[cli]>=1.9.4",
-    "tigo-python",
+    "python-dotenv>=1.0.0",
+    "mcp>=0.9.0",
+    "tigo-python>=1.0.0", 
+    "fastmcp>=2.0.0",
+    "pydantic>=2.0.0",
+    "asyncio-mqtt>=0.16.0; python_version<'3.11'",
 ]
 
-[tool.uv.sources]
-tigo-python = { path = "../tigo_python" }
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "build>=0.10.0",
+    "twine>=4.0.0",
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/matt-dreyer/Tigo_MCP_server"
+Repository = "https://github.com/matt-dreyer/Tigo_MCP_server"
+Documentation = "https://github.com/matt-dreyer/Tigo_MCP_server#readme"
+Issues = "https://github.com/matt-dreyer/Tigo_MCP_server/issues"
+Changelog = "https://github.com/matt-dreyer/Tigo_MCP_server/blob/main/CHANGELOG.md"
+
+[project.scripts]
+tigo-mcp-server = "tigo_mcp_server.server:main"
+
+[tool.hatch.version]
+path = "src/tigo_mcp_server/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tigo_mcp_server"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/.env.example",
+    "/CHANGELOG.md",
+    "/pyproject.toml",
+]
+exclude = [
+    "/.git",
+    "/.github",
+    "/docs",
+    "**/__pycache__",
+    "**/*.pyc",
+    "**/.pytest_cache",
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 80
+
+[tool.black]
+line-length = 88
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "tigo.*",
+    "mcp.*",
+    "fastmcp.*",
+]
+ignore_missing_imports = true
