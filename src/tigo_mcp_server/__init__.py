@@ -18,7 +18,7 @@ Example:
     >>> main()  # Starts the MCP server
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __author__ = "Matt Dreyer"
 __email__ = "matt_dreyer@hotmail.com"
 __description__ = "Model Context Protocol server for Tigo Energy solar system monitoring and analytics"
