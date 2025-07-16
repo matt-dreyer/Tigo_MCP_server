@@ -14,17 +14,16 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
-from pathlib import Path
 
-# MCP and FastMCP imports
+# MCP imports - Using standard MCP
 from mcp.server import Server
 from mcp.types import TextContent, Tool
-import fastmcp
+from mcp.server.stdio import stdio_server
 
 # Environment and configuration
 from dotenv import load_dotenv
 
-# Tigo API client - CORRECT IMPORT
+# Tigo API client
 try:
     from tigo_python import TigoClient
 except ImportError:
@@ -85,8 +84,6 @@ def initialize_tigo_client() -> Optional[TigoClient]:
         return None
     
     try:
-        # Initialize TigoClient - it will load credentials from environment automatically
-        # or we can pass them explicitly
         tigo_client = TigoClient(username=username, password=password)
         logger.info("Tigo API client initialized successfully")
         return tigo_client
@@ -94,27 +91,166 @@ def initialize_tigo_client() -> Optional[TigoClient]:
         logger.error(f"Failed to initialize Tigo API client: {e}")
         return None
 
-# Initialize FastMCP app
-app = fastmcp.FastMCP("Tigo Energy MCP Server")
+# Initialize MCP server
+server = Server("Tigo Energy MCP Server")
 
-@app.tool()
-async def fetch_configuration() -> Dict[str, Any]:
-    """
-    Query the Tigo API for the runtime status of the system.
+@server.list_tools()
+async def list_tools() -> List[Tool]:
+    """List available tools."""
+    return [
+        Tool(
+            name="EG4:Fetch_Configuration",
+            description="Query the EG4 API for the runtime status of the inverter",
+            inputSchema={"type": "object", "properties": {}}
+        ),
+        Tool(
+            name="EG4:Get_System_Details",
+            description="Get detailed information about a specific system including layout, sources, and summary. If no system_id provided, uses the first available system.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "system_id": {"type": ["integer", "null"], "description": "Specific system ID, uses first available system if not provided"}
+                }
+            }
+        ),
+        Tool(
+            name="EG4:Get_Current_Production",
+            description="Get today's production data and real-time system summary.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "system_id": {"type": ["integer", "null"], "description": "Target system ID"}
+                }
+            }
+        ),
+        Tool(
+            name="EG4:Get_Performance_Analysis",
+            description="Get comprehensive performance analysis including efficiency metrics and panel performance.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "system_id": {"type": ["integer", "null"], "description": "Target system ID"},
+                    "days_back": {"type": "integer", "default": 7, "description": "Number of days to analyze"}
+                }
+            }
+        ),
+        Tool(
+            name="EG4:Get_Historical_Data",
+            description="Get historical production data for analysis.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "system_id": {"type": ["integer", "null"], "description": "System ID"},
+                    "days_back": {"type": "integer", "default": 30, "description": "Number of days of historical data"},
+                    "level": {"type": "string", "default": "day", "description": "Data granularity - minute, hour, or day"}
+                }
+            }
+        ),
+        Tool(
+            name="EG4:Get_System_Alerts",
+            description="Get recent alerts and system health information.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "system_id": {"type": ["integer", "null"], "description": "Target system ID"},
+                    "days_back": {"type": "integer", "default": 30, "description": "Number of days to look back for alerts"}
+                }
+            }
+        ),
+        Tool(
+            name="EG4:Get_System_Health",
+            description="Get comprehensive system health status combining multiple data sources.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "system_id": {"type": ["integer", "null"], "description": "Target system ID"}
+                }
+            }
+        ),
+        Tool(
+            name="EG4:Get_Maintenance_Insights",
+            description="Get maintenance recommendations based on system performance analysis.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "system_id": {"type": ["integer", "null"], "description": "Target system ID"},
+                    "threshold_percent": {"type": "number", "default": 85, "description": "Performance threshold for identifying underperforming panels"}
+                }
+            }
+        ),
+        Tool(
+            name="EG4:Get_Daily_Chart_Data",
+            description="Get detailed daily chart data with 10-minute interval time series analysis.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "system_id": {"type": ["integer", "null"], "description": "System ID"},
+                    "date_text": {"type": ["string", "null"], "description": "Date in YYYY-MM-DD format"},
+                    "analysis_type": {"type": "string", "default": "full", "description": "Type of analysis - full, summary, hourly, efficiency, or raw"}
+                }
+            }
+        )
+    ]
+
+@server.call_tool()
+async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
+    """Handle tool calls."""
+    try:
+        if name == "EG4:Fetch_Configuration":
+            result = await fetch_configuration()
+        elif name == "EG4:Get_System_Details":
+            result = await get_system_details(arguments.get("system_id"))
+        elif name == "EG4:Get_Current_Production":
+            result = await get_current_production(arguments.get("system_id"))
+        elif name == "EG4:Get_Performance_Analysis":
+            result = await get_performance_analysis(
+                arguments.get("system_id"), 
+                arguments.get("days_back", 7)
+            )
+        elif name == "EG4:Get_Historical_Data":
+            result = await get_historical_data(
+                arguments.get("system_id"),
+                arguments.get("days_back", 30),
+                arguments.get("level", "day")
+            )
+        elif name == "EG4:Get_System_Alerts":
+            result = await get_system_alerts(
+                arguments.get("system_id"),
+                arguments.get("days_back", 30)
+            )
+        elif name == "EG4:Get_System_Health":
+            result = await get_system_health(arguments.get("system_id"))
+        elif name == "EG4:Get_Maintenance_Insights":
+            result = await get_maintenance_insights(
+                arguments.get("system_id"),
+                arguments.get("threshold_percent", 85.0)
+            )
+        elif name == "EG4:Get_Daily_Chart_Data":
+            result = await get_daily_chart_data(
+                arguments.get("system_id"),
+                arguments.get("date_text"),
+                arguments.get("analysis_type", "full")
+            )
+        else:
+            raise ValueError(f"Unknown tool: {name}")
+        
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
     
-    Returns:
-        Dict containing user account information and list of available solar systems.
-    """
+    except Exception as e:
+        error_msg = f"Error executing {name}: {str(e)}"
+        logger.error(error_msg)
+        return [TextContent(type="text", text=json.dumps({"error": error_msg}, indent=2))]
+
+# Tool implementation functions
+async def fetch_configuration() -> Dict[str, Any]:
+    """Query the Tigo API for the runtime status of the system."""
     try:
         client = initialize_tigo_client()
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
         with client:
-            # Get user information
             user_info = client.get_user()
-            
-            # Get systems information
             systems_info = client.list_systems()
             
             result = {
@@ -129,34 +265,21 @@ async def fetch_configuration() -> Dict[str, Any]:
         logger.error(f"Error fetching configuration: {e}")
         raise
 
-@app.tool()
 async def get_system_details(system_id: Optional[int] = None) -> Dict[str, Any]:
-    """
-    Get detailed information about a specific system including layout, sources, and summary.
-    If no system_id provided, uses the first available system.
-    
-    Args:
-        system_id: Specific system ID, uses first available system if not provided
-        
-    Returns:
-        Dict containing comprehensive system information
-    """
+    """Get detailed information about a specific system."""
     try:
         client = initialize_tigo_client()
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
         with client:
-            # If no system_id provided, get the first available system
             if system_id is None:
                 systems = client.list_systems()
                 if not systems or not systems.get('systems'):
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
-            # Get detailed system information
             system_details = client.get_system_details(system_id)
-            
             result = safe_json_serialize(system_details)
             logger.info(f"System details retrieved for system ID: {system_id}")
             return result
@@ -165,31 +288,20 @@ async def get_system_details(system_id: Optional[int] = None) -> Dict[str, Any]:
         logger.error(f"Error getting system details: {e}")
         raise
 
-@app.tool()
 async def get_current_production(system_id: Optional[int] = None) -> Dict[str, Any]:
-    """
-    Get today's production data and real-time system summary.
-    
-    Args:
-        system_id: Target system ID
-        
-    Returns:
-        Dict containing current production metrics, today's generation data, and system status
-    """
+    """Get today's production data and real-time system summary."""
     try:
         client = initialize_tigo_client()
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
         with client:
-            # If no system_id provided, get the first available system
             if system_id is None:
                 systems = client.list_systems()
                 if not systems or not systems.get('systems'):
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
-            # Get current production summary
             production_data = client.get_summary(system_id)
             
             result = {
@@ -205,48 +317,33 @@ async def get_current_production(system_id: Optional[int] = None) -> Dict[str, A
         logger.error(f"Error getting current production: {e}")
         raise
 
-@app.tool()
 async def get_performance_analysis(
     system_id: Optional[int] = None, 
     days_back: int = 7
 ) -> Dict[str, Any]:
-    """
-    Get comprehensive performance analysis including efficiency metrics and panel performance.
-    
-    Args:
-        system_id: Target system ID
-        days_back: Number of days to analyze (default: 7)
-        
-    Returns:
-        Dict containing efficiency metrics, top/bottom performing panels, and performance summary
-    """
+    """Get comprehensive performance analysis including efficiency metrics and panel performance."""
     try:
         client = initialize_tigo_client()
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
         with client:
-            # If no system_id provided, get the first available system
             if system_id is None:
                 systems = client.list_systems()
                 if not systems or not systems.get('systems'):
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
-            # Get system efficiency analysis
             efficiency_data = client.calculate_system_efficiency(system_id, days_back=days_back)
             
-            # Get panel performance data
             try:
                 panel_performance = client.get_panel_performance(system_id)
-                # Convert DataFrame to dict if it's a DataFrame
                 if hasattr(panel_performance, 'to_dict'):
                     panel_performance = panel_performance.to_dict('records')
             except Exception as e:
                 logger.warning(f"Could not get panel performance: {e}")
                 panel_performance = []
             
-            # Get underperforming panels
             try:
                 underperforming = client.find_underperforming_panels(system_id, threshold_percent=85)
             except Exception as e:
@@ -269,50 +366,33 @@ async def get_performance_analysis(
         logger.error(f"Error getting performance analysis: {e}")
         raise
 
-@app.tool()
 async def get_historical_data(
     system_id: Optional[int] = None,
     days_back: int = 30,
     level: str = "day"
 ) -> Dict[str, Any]:
-    """
-    Get historical production data for analysis.
-
-    Args:
-        system_id: System ID (optional, uses first system if not provided)
-        days_back: Number of days of historical data (default: 30)
-        level: Data granularity - "minute", "hour", or "day" (default: "day")
-        
-    Returns:
-        Dict containing historical production data with statistical summary
-    """
+    """Get historical production data for analysis."""
     try:
         client = initialize_tigo_client()
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
-        # Validate level parameter
         if level not in ["minute", "hour", "day"]:
             raise ValueError("Level must be 'minute', 'hour', or 'day'")
         
         with client:
-            # If no system_id provided, get the first available system
             if system_id is None:
                 systems = client.list_systems()
                 if not systems or not systems.get('systems'):
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
-            # Get historical data based on requested timeframe
             if days_back == 1:
-                # Get today's data
                 historical_data = client.get_today_data(system_id)
             else:
-                # Get data for longer period
                 end_date = datetime.now()
                 start_date = end_date - timedelta(days=days_back)
                 
-                # Use the appropriate method based on timeframe
                 if days_back <= 7:
                     historical_data = client.get_data_range(
                         system_id, 
@@ -321,10 +401,8 @@ async def get_historical_data(
                         granularity=level
                     )
                 else:
-                    # For longer periods, get summary data
                     historical_data = client.get_summary(system_id)
             
-            # Convert DataFrame to dict if needed
             if hasattr(historical_data, 'to_dict'):
                 historical_data = historical_data.to_dict('records')
             
@@ -350,42 +428,29 @@ async def get_historical_data(
         logger.error(f"Error getting historical data: {e}")
         raise
 
-@app.tool()
 async def get_system_alerts(
     system_id: Optional[int] = None,
     days_back: int = 30
 ) -> Dict[str, Any]:
-    """
-    Get recent alerts and system health information.
-    
-    Args:
-        system_id: Target system ID
-        days_back: Number of days to look back for alerts (default: 30)
-        
-    Returns:
-        Dict containing active and recent alerts with categorization and status
-    """
+    """Get recent alerts and system health information."""
     try:
         client = initialize_tigo_client()
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
         with client:
-            # If no system_id provided, get the first available system
             if system_id is None:
                 systems = client.list_systems()
                 if not systems or not systems.get('systems'):
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
-            # Get alerts
             try:
                 alerts_data = client.get_alerts(system_id)
             except Exception as e:
                 logger.warning(f"Could not get alerts: {e}")
                 alerts_data = []
             
-            # Get system info for status
             systems_info = client.list_systems()
             system_info = None
             
@@ -418,35 +483,23 @@ async def get_system_alerts(
         logger.error(f"Error getting system alerts: {e}")
         raise
 
-@app.tool()
 async def get_system_health(system_id: Optional[int] = None) -> Dict[str, Any]:
-    """
-    Get comprehensive system health status combining multiple data sources.
-    
-    Args:
-        system_id: Target system ID
-        
-    Returns:
-        Dict containing overall health rating with supporting metrics and recommendations
-    """
+    """Get comprehensive system health status combining multiple data sources."""
     try:
         client = initialize_tigo_client()
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
         with client:
-            # If no system_id provided, get the first available system
             if system_id is None:
                 systems = client.list_systems()
                 if not systems or not systems.get('systems'):
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
-            # Get system summary and efficiency data
             summary = client.get_summary(system_id)
             efficiency_data = client.calculate_system_efficiency(system_id, days_back=7)
             
-            # Get system info
             systems_info = client.list_systems()
             system_info = None
             for system in systems_info.get('systems', []):
@@ -457,17 +510,14 @@ async def get_system_health(system_id: Optional[int] = None) -> Dict[str, Any]:
             if not system_info:
                 raise Exception(f"System {system_id} not found")
             
-            # Get alerts
             try:
                 alerts = client.get_alerts(system_id)
                 active_alerts = len(alerts) if isinstance(alerts, list) else 0
             except:
                 active_alerts = 0
             
-            # Calculate health metrics
             efficiency_percent = efficiency_data.get('average_efficiency_percent', 0)
             
-            # Determine overall health
             if active_alerts == 0 and efficiency_percent > 80:
                 overall_health = "Excellent"
             elif active_alerts == 0 and efficiency_percent > 60:
@@ -508,38 +558,25 @@ async def get_system_health(system_id: Optional[int] = None) -> Dict[str, Any]:
         logger.error(f"Error getting system health: {e}")
         raise
 
-@app.tool()
 async def get_maintenance_insights(
     system_id: Optional[int] = None,
     threshold_percent: float = 85.0
 ) -> Dict[str, Any]:
-    """
-    Get maintenance recommendations based on system performance analysis.
-    
-    Args:
-        system_id: Target system ID
-        threshold_percent: Performance threshold for identifying underperforming panels (default: 85.0)
-        
-    Returns:
-        Dict containing prioritized maintenance recommendations with affected components and next actions
-    """
+    """Get maintenance recommendations based on system performance analysis."""
     try:
         client = initialize_tigo_client()
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
         with client:
-            # If no system_id provided, get the first available system
             if system_id is None:
                 systems = client.list_systems()
                 if not systems or not systems.get('systems'):
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
-            # Get efficiency analysis
             efficiency_data = client.calculate_system_efficiency(system_id, days_back=30)
             
-            # Get underperforming panels
             try:
                 underperforming_panels = client.find_underperforming_panels(
                     system_id, 
@@ -548,16 +585,13 @@ async def get_maintenance_insights(
             except:
                 underperforming_panels = []
             
-            # Get alerts
             try:
                 alerts = client.get_alerts(system_id)
                 active_alerts = len(alerts) if isinstance(alerts, list) else 0
             except:
                 active_alerts = 0
             
-            # Generate maintenance recommendations
             recommendations = []
-            
             current_efficiency = efficiency_data.get('average_efficiency_percent', 0)
             
             if current_efficiency < threshold_percent:
@@ -609,7 +643,7 @@ async def get_maintenance_insights(
                     "medium_priority": len([r for r in recommendations if r["priority"] == "Medium"]),
                     "low_priority": len([r for r in recommendations if r["priority"] == "Low"])
                 },
-                "next_actions": [rec["action"] for rec in recommendations[:3]]  # Top 3 actions
+                "next_actions": [rec["action"] for rec in recommendations[:3]]
             }
             
             logger.info(f"Maintenance insights generated for system ID: {system_id}")
@@ -619,43 +653,29 @@ async def get_maintenance_insights(
         logger.error(f"Error getting maintenance insights: {e}")
         raise
 
-@app.tool()
 async def get_daily_chart_data(
     system_id: Optional[int] = None,
     date_text: Optional[str] = None,
     analysis_type: str = "full"
 ) -> Dict[str, Any]:
-    """
-    Get detailed daily chart data with 10-minute interval time series analysis.
-    
-    Args:
-        system_id: System ID (optional, uses first system if not provided)
-        date_text: Date in YYYY-MM-DD format (optional, uses today if not provided)
-        analysis_type: Type of analysis - "full", "summary", "hourly", "efficiency", or "raw"
-        
-    Returns:
-        Dict containing detailed time-series analysis with 10-minute intervals
-    """
+    """Get detailed daily chart data with 10-minute interval time series analysis."""
     try:
         client = initialize_tigo_client()
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
         with client:
-            # If no system_id provided, get the first available system
             if system_id is None:
                 systems = client.list_systems()
                 if not systems or not systems.get('systems'):
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
-            # Use today if no date provided
             if date_text is None:
                 target_date = datetime.now().date()
                 daily_data = client.get_today_data(system_id)
             else:
                 target_date = datetime.strptime(date_text, "%Y-%m-%d").date()
-                # Get data for specific date
                 start_datetime = datetime.combine(target_date, datetime.min.time())
                 end_datetime = datetime.combine(target_date, datetime.max.time())
                 daily_data = client.get_data_range(
@@ -665,18 +685,15 @@ async def get_daily_chart_data(
                     granularity="minute"
                 )
             
-            # Convert DataFrame to dict if needed
             if hasattr(daily_data, 'to_dict'):
                 daily_data = daily_data.to_dict('records')
             
-            # Analyze data based on analysis_type
             analysis_result = {}
             
             if analysis_type in ["full", "summary"]:
                 analysis_result["daily_summary"] = safe_json_serialize(daily_data)
             
             if analysis_type in ["full", "efficiency"]:
-                # Calculate efficiency metrics if possible
                 if isinstance(daily_data, list) and daily_data:
                     total_energy = sum(point.get('energy', 0) for point in daily_data if point.get('energy'))
                     max_power = max(point.get('power', 0) for point in daily_data if point.get('power'))
@@ -707,19 +724,24 @@ async def get_daily_chart_data(
         logger.error(f"Error getting daily chart data: {e}")
         raise
 
+async def main_async():
+    """Async main function to run the MCP server."""
+    # Initialize Tigo client to verify credentials
+    client = initialize_tigo_client()
+    if not client:
+        logger.error("Failed to initialize Tigo client. Please check your credentials.")
+        sys.exit(1)
+    
+    logger.info("Starting Tigo MCP Server...")
+    
+    # Run the MCP server with stdio transport
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream, server.create_initialization_options())
+
 def main():
     """Entry point for the Tigo MCP server."""
     try:
-        # Initialize Tigo client
-        client = initialize_tigo_client()
-        if not client:
-            logger.error("Failed to initialize Tigo client. Please check your credentials.")
-            sys.exit(1)
-        
-        logger.info("Starting Tigo MCP Server...")
-        
-        # Run the FastMCP server
-        app.run()
+        asyncio.run(main_async())
         
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
