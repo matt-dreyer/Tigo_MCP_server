@@ -61,6 +61,8 @@ def safe_json_serialize(obj: Any) -> Any:
         return [safe_json_serialize(item) for item in obj]
     elif hasattr(obj, 'isoformat'):  # datetime objects
         return obj.isoformat()
+    elif hasattr(obj, 'to_dict'):  # pandas DataFrame
+        return obj.to_dict('records')
     else:
         return str(obj)
 
@@ -99,13 +101,13 @@ async def list_tools() -> List[Tool]:
     """List available tools."""
     return [
         Tool(
-            name="EG4:Fetch_Configuration",
-            description="Query the EG4 API for the runtime status of the inverter",
+            name="Get_Tigo_Configuration",
+            description="Get user information and list all accessible Tigo solar systems",
             inputSchema={"type": "object", "properties": {}}
         ),
         Tool(
-            name="EG4:Get_System_Details",
-            description="Get detailed information about a specific system including layout, sources, and summary. If no system_id provided, uses the first available system.",
+            name="Get_System_Details",
+            description="Get detailed information about a specific Tigo system including layout, sources, and summary. If no system_id provided, uses the first available system.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -114,8 +116,8 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="EG4:Get_Current_Production",
-            description="Get today's production data and real-time system summary.",
+            name="Get_Current_Production",
+            description="Get today's production data and real-time system summary from Tigo system.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -124,8 +126,8 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="EG4:Get_Performance_Analysis",
-            description="Get comprehensive performance analysis including efficiency metrics and panel performance.",
+            name="Get_Performance_Analysis",
+            description="Get comprehensive performance analysis including efficiency metrics and panel performance for Tigo system.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -135,8 +137,8 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="EG4:Get_Historical_Data",
-            description="Get historical production data for analysis.",
+            name="Get_Historical_Data",
+            description="Get historical production data for analysis from Tigo system.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -147,8 +149,8 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="EG4:Get_System_Alerts",
-            description="Get recent alerts and system health information.",
+            name="Get_System_Alerts",
+            description="Get recent alerts and system health information from Tigo system.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -158,8 +160,8 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="EG4:Get_System_Health",
-            description="Get comprehensive system health status combining multiple data sources.",
+            name="Get_System_Health",
+            description="Get comprehensive system health status combining multiple data sources from Tigo system.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -168,8 +170,8 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="EG4:Get_Maintenance_Insights",
-            description="Get maintenance recommendations based on system performance analysis.",
+            name="Get_Maintenance_Insights",
+            description="Get maintenance recommendations based on Tigo system performance analysis.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -179,14 +181,27 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="EG4:Get_Daily_Chart_Data",
-            description="Get detailed daily chart data with 10-minute interval time series analysis.",
+            name="Get_Daily_Chart_Data",
+            description="Get detailed daily chart data with time series analysis from Tigo system.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "system_id": {"type": ["integer", "null"], "description": "System ID"},
                     "date_text": {"type": ["string", "null"], "description": "Date in YYYY-MM-DD format"},
                     "analysis_type": {"type": "string", "default": "full", "description": "Type of analysis - full, summary, hourly, efficiency, or raw"}
+                }
+            }
+        ),
+        Tool(
+            name="Get_Data_Range",
+            description="Get Tigo system data for a specific date range with configurable granularity.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "system_id": {"type": ["integer", "null"], "description": "System ID"},
+                    "start_date": {"type": "string", "description": "Start date in YYYY-MM-DD format"},
+                    "end_date": {"type": "string", "description": "End date in YYYY-MM-DD format"},
+                    "granularity": {"type": "string", "default": "hour", "description": "Data granularity - minute, hour, or day"}
                 }
             }
         )
@@ -196,40 +211,47 @@ async def list_tools() -> List[Tool]:
 async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     """Handle tool calls."""
     try:
-        if name == "EG4:Fetch_Configuration":
-            result = await fetch_configuration()
-        elif name == "EG4:Get_System_Details":
+        if name == "Get_Tigo_Configuration":
+            result = await get_tigo_configuration()
+        elif name == "Get_System_Details":
             result = await get_system_details(arguments.get("system_id"))
-        elif name == "EG4:Get_Current_Production":
+        elif name == "Get_Current_Production":
             result = await get_current_production(arguments.get("system_id"))
-        elif name == "EG4:Get_Performance_Analysis":
+        elif name == "Get_Performance_Analysis":
             result = await get_performance_analysis(
                 arguments.get("system_id"), 
                 arguments.get("days_back", 7)
             )
-        elif name == "EG4:Get_Historical_Data":
+        elif name == "Get_Historical_Data":
             result = await get_historical_data(
                 arguments.get("system_id"),
                 arguments.get("days_back", 30),
                 arguments.get("level", "day")
             )
-        elif name == "EG4:Get_System_Alerts":
+        elif name == "Get_System_Alerts":
             result = await get_system_alerts(
                 arguments.get("system_id"),
                 arguments.get("days_back", 30)
             )
-        elif name == "EG4:Get_System_Health":
+        elif name == "Get_System_Health":
             result = await get_system_health(arguments.get("system_id"))
-        elif name == "EG4:Get_Maintenance_Insights":
+        elif name == "Get_Maintenance_Insights":
             result = await get_maintenance_insights(
                 arguments.get("system_id"),
                 arguments.get("threshold_percent", 85.0)
             )
-        elif name == "EG4:Get_Daily_Chart_Data":
+        elif name == "Get_Daily_Chart_Data":
             result = await get_daily_chart_data(
                 arguments.get("system_id"),
                 arguments.get("date_text"),
                 arguments.get("analysis_type", "full")
+            )
+        elif name == "Get_Data_Range":
+            result = await get_data_range(
+                arguments.get("system_id"),
+                arguments.get("start_date"),
+                arguments.get("end_date"),
+                arguments.get("granularity", "hour")
             )
         else:
             raise ValueError(f"Unknown tool: {name}")
@@ -242,8 +264,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         return [TextContent(type="text", text=json.dumps({"error": error_msg}, indent=2))]
 
 # Tool implementation functions
-async def fetch_configuration() -> Dict[str, Any]:
-    """Query the Tigo API for the runtime status of the system."""
+async def get_tigo_configuration() -> Dict[str, Any]:
+    """Get user information and list all accessible Tigo systems."""
     try:
         client = initialize_tigo_client()
         if not client:
@@ -255,18 +277,19 @@ async def fetch_configuration() -> Dict[str, Any]:
             
             result = {
                 "user": safe_json_serialize(user_info),
-                "systems": safe_json_serialize(systems_info)
+                "systems": safe_json_serialize(systems_info),
+                "timestamp": datetime.now().isoformat()
             }
             
-            logger.info(f"Configuration fetched successfully")
+            logger.info(f"Tigo configuration fetched successfully")
             return result
         
     except Exception as e:
-        logger.error(f"Error fetching configuration: {e}")
+        logger.error(f"Error fetching Tigo configuration: {e}")
         raise
 
 async def get_system_details(system_id: Optional[int] = None) -> Dict[str, Any]:
-    """Get detailed information about a specific system."""
+    """Get detailed information about a specific Tigo system."""
     try:
         client = initialize_tigo_client()
         if not client:
@@ -279,9 +302,22 @@ async def get_system_details(system_id: Optional[int] = None) -> Dict[str, Any]:
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
-            system_details = client.get_system_details(system_id)
-            result = safe_json_serialize(system_details)
-            logger.info(f"System details retrieved for system ID: {system_id}")
+            # Get comprehensive system information
+            system_info = client.get_system(system_id)
+            layout_info = client.get_system_layout(system_id)
+            sources_info = client.get_sources(system_id)
+            summary_info = client.get_summary(system_id)
+            
+            result = {
+                "system_id": system_id,
+                "timestamp": datetime.now().isoformat(),
+                "system": safe_json_serialize(system_info),
+                "layout": safe_json_serialize(layout_info),
+                "sources": safe_json_serialize(sources_info),
+                "summary": safe_json_serialize(summary_info)
+            }
+            
+            logger.info(f"System details retrieved for Tigo system ID: {system_id}")
             return result
         
     except Exception as e:
@@ -302,15 +338,19 @@ async def get_current_production(system_id: Optional[int] = None) -> Dict[str, A
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
-            production_data = client.get_summary(system_id)
+            # Get current summary and today's data
+            summary_data = client.get_summary(system_id)
+            today_data = client.get_today_data(system_id)
             
             result = {
                 "system_id": system_id,
                 "timestamp": datetime.now().isoformat(),
-                "summary": safe_json_serialize(production_data)
+                "summary": safe_json_serialize(summary_data),
+                "today_data": safe_json_serialize(today_data),
+                "data_points_today": len(today_data) if hasattr(today_data, '__len__') else 0
             }
             
-            logger.info(f"Current production data retrieved for system ID: {system_id}")
+            logger.info(f"Current production data retrieved for Tigo system ID: {system_id}")
             return result
         
     except Exception as e:
@@ -334,16 +374,18 @@ async def get_performance_analysis(
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
+            # Get efficiency analysis
             efficiency_data = client.calculate_system_efficiency(system_id, days_back=days_back)
             
+            # Get panel performance data
             try:
-                panel_performance = client.get_panel_performance(system_id)
-                if hasattr(panel_performance, 'to_dict'):
-                    panel_performance = panel_performance.to_dict('records')
+                panel_performance = client.get_panel_performance(system_id, days_back=days_back)
+                panel_performance_data = safe_json_serialize(panel_performance)
             except Exception as e:
                 logger.warning(f"Could not get panel performance: {e}")
-                panel_performance = []
+                panel_performance_data = []
             
+            # Get underperforming panels
             try:
                 underperforming = client.find_underperforming_panels(system_id, threshold_percent=85)
             except Exception as e:
@@ -355,11 +397,16 @@ async def get_performance_analysis(
                 "analysis_period_days": days_back,
                 "timestamp": datetime.now().isoformat(),
                 "efficiency_analysis": safe_json_serialize(efficiency_data),
-                "panel_performance": safe_json_serialize(panel_performance),
-                "underperforming_panels": safe_json_serialize(underperforming)
+                "panel_performance": panel_performance_data,
+                "underperforming_panels": safe_json_serialize(underperforming),
+                "analysis_summary": {
+                    "total_panels_analyzed": len(panel_performance_data) if isinstance(panel_performance_data, list) else 0,
+                    "underperforming_count": len(underperforming) if isinstance(underperforming, list) else 0,
+                    "efficiency_percent": efficiency_data.get('average_efficiency_percent', 0) if isinstance(efficiency_data, dict) else 0
+                }
             }
             
-            logger.info(f"Performance analysis completed for system ID: {system_id}")
+            logger.info(f"Performance analysis completed for Tigo system ID: {system_id}")
             return result
         
     except Exception as e:
@@ -387,24 +434,11 @@ async def get_historical_data(
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
+            # Get historical data using the safe date range method
             if days_back == 1:
                 historical_data = client.get_today_data(system_id)
             else:
-                end_date = datetime.now()
-                start_date = end_date - timedelta(days=days_back)
-                
-                if days_back <= 7:
-                    historical_data = client.get_data_range(
-                        system_id, 
-                        start_date, 
-                        end_date, 
-                        granularity=level
-                    )
-                else:
-                    historical_data = client.get_summary(system_id)
-            
-            if hasattr(historical_data, 'to_dict'):
-                historical_data = historical_data.to_dict('records')
+                historical_data = client.get_date_range_data(system_id, days_back, level)
             
             result = {
                 "system_id": system_id,
@@ -417,11 +451,11 @@ async def get_historical_data(
                 "metadata": {
                     "granularity": level,
                     "period_days": days_back,
-                    "data_points": len(historical_data) if isinstance(historical_data, list) else "summary"
+                    "data_points": len(historical_data) if hasattr(historical_data, '__len__') else "summary"
                 }
             }
             
-            logger.info(f"Historical data retrieved for system ID: {system_id}")
+            logger.info(f"Historical data retrieved for Tigo system ID: {system_id}")
             return result
         
     except Exception as e:
@@ -445,12 +479,14 @@ async def get_system_alerts(
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
+            # Get alerts data
             try:
                 alerts_data = client.get_alerts(system_id)
             except Exception as e:
                 logger.warning(f"Could not get alerts: {e}")
                 alerts_data = []
             
+            # Get system status from systems list
             systems_info = client.list_systems()
             system_info = None
             
@@ -476,7 +512,7 @@ async def get_system_alerts(
                 }
             }
             
-            logger.info(f"System alerts retrieved for system ID: {system_id}")
+            logger.info(f"System alerts retrieved for Tigo system ID: {system_id}")
             return result
         
     except Exception as e:
@@ -497,9 +533,11 @@ async def get_system_health(system_id: Optional[int] = None) -> Dict[str, Any]:
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
+            # Get current summary and efficiency data
             summary = client.get_summary(system_id)
             efficiency_data = client.calculate_system_efficiency(system_id, days_back=7)
             
+            # Get system status from systems list
             systems_info = client.list_systems()
             system_info = None
             for system in systems_info.get('systems', []):
@@ -510,13 +548,15 @@ async def get_system_health(system_id: Optional[int] = None) -> Dict[str, Any]:
             if not system_info:
                 raise Exception(f"System {system_id} not found")
             
+            # Get alerts count
             try:
                 alerts = client.get_alerts(system_id)
                 active_alerts = len(alerts) if isinstance(alerts, list) else 0
             except:
                 active_alerts = 0
             
-            efficiency_percent = efficiency_data.get('average_efficiency_percent', 0)
+            # Calculate overall health score
+            efficiency_percent = efficiency_data.get('average_efficiency_percent', 0) if isinstance(efficiency_data, dict) else 0
             
             if active_alerts == 0 and efficiency_percent > 80:
                 overall_health = "Excellent"
@@ -527,6 +567,7 @@ async def get_system_health(system_id: Optional[int] = None) -> Dict[str, Any]:
             else:
                 overall_health = "Needs Attention"
             
+            # Generate recommendations
             recommendations = []
             if efficiency_percent < 60:
                 recommendations.append("System efficiency is below optimal - consider maintenance check")
@@ -551,7 +592,7 @@ async def get_system_health(system_id: Optional[int] = None) -> Dict[str, Any]:
                 }
             }
             
-            logger.info(f"System health assessment completed for system ID: {system_id}")
+            logger.info(f"System health assessment completed for Tigo system ID: {system_id}")
             return result
         
     except Exception as e:
@@ -575,8 +616,10 @@ async def get_maintenance_insights(
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
+            # Get efficiency analysis
             efficiency_data = client.calculate_system_efficiency(system_id, days_back=30)
             
+            # Get underperforming panels
             try:
                 underperforming_panels = client.find_underperforming_panels(
                     system_id, 
@@ -585,14 +628,16 @@ async def get_maintenance_insights(
             except:
                 underperforming_panels = []
             
+            # Get alerts count
             try:
                 alerts = client.get_alerts(system_id)
                 active_alerts = len(alerts) if isinstance(alerts, list) else 0
             except:
                 active_alerts = 0
             
+            # Generate maintenance recommendations
             recommendations = []
-            current_efficiency = efficiency_data.get('average_efficiency_percent', 0)
+            current_efficiency = efficiency_data.get('average_efficiency_percent', 0) if isinstance(efficiency_data, dict) else 0
             
             if current_efficiency < threshold_percent:
                 recommendations.append({
@@ -646,7 +691,7 @@ async def get_maintenance_insights(
                 "next_actions": [rec["action"] for rec in recommendations[:3]]
             }
             
-            logger.info(f"Maintenance insights generated for system ID: {system_id}")
+            logger.info(f"Maintenance insights generated for Tigo system ID: {system_id}")
             return result
         
     except Exception as e:
@@ -658,7 +703,7 @@ async def get_daily_chart_data(
     date_text: Optional[str] = None,
     analysis_type: str = "full"
 ) -> Dict[str, Any]:
-    """Get detailed daily chart data with 10-minute interval time series analysis."""
+    """Get detailed daily chart data with time series analysis."""
     try:
         client = initialize_tigo_client()
         if not client:
@@ -671,37 +716,54 @@ async def get_daily_chart_data(
                     raise Exception("No systems found for this account")
                 system_id = systems['systems'][0]['system_id']
             
+            # Parse target date
             if date_text is None:
                 target_date = datetime.now().date()
                 daily_data = client.get_today_data(system_id)
             else:
-                target_date = datetime.strptime(date_text, "%Y-%m-%d").date()
-                start_datetime = datetime.combine(target_date, datetime.min.time())
-                end_datetime = datetime.combine(target_date, datetime.max.time())
-                daily_data = client.get_data_range(
-                    system_id, 
-                    start_datetime, 
-                    end_datetime, 
-                    granularity="minute"
-                )
+                try:
+                    target_date = datetime.strptime(date_text, "%Y-%m-%d").date()
+                    start_datetime = datetime.combine(target_date, datetime.min.time())
+                    end_datetime = datetime.combine(target_date, datetime.max.time())
+                    daily_data = client.get_combined_data(
+                        system_id, 
+                        start_datetime.isoformat(), 
+                        end_datetime.isoformat(), 
+                        level="hour"  # Use hour level for better performance
+                    )
+                except ValueError:
+                    raise ValueError("Invalid date format. Use YYYY-MM-DD")
             
-            if hasattr(daily_data, 'to_dict'):
-                daily_data = daily_data.to_dict('records')
-            
+            # Process analysis based on type
             analysis_result = {}
             
             if analysis_type in ["full", "summary"]:
                 analysis_result["daily_summary"] = safe_json_serialize(daily_data)
             
-            if analysis_type in ["full", "efficiency"]:
-                if isinstance(daily_data, list) and daily_data:
-                    total_energy = sum(point.get('energy', 0) for point in daily_data if point.get('energy'))
-                    max_power = max(point.get('power', 0) for point in daily_data if point.get('power'))
-                    analysis_result["efficiency_metrics"] = {
-                        "total_energy_today": total_energy,
-                        "peak_power": max_power,
-                        "data_points": len(daily_data)
-                    }
+            if analysis_type in ["full", "efficiency"] and hasattr(daily_data, '__len__'):
+                # Calculate efficiency metrics if we have data
+                if hasattr(daily_data, 'iloc') and len(daily_data) > 0:
+                    # This is a DataFrame
+                    power_col = daily_data.iloc[:, 0] if len(daily_data.columns) > 0 else None
+                    if power_col is not None:
+                        power_values = power_col.dropna()
+                        if len(power_values) > 0:
+                            analysis_result["efficiency_metrics"] = {
+                                "total_energy_today": float(power_values.sum()),
+                                "peak_power": float(power_values.max()),
+                                "average_power": float(power_values.mean()),
+                                "data_points": len(power_values)
+                            }
+                elif isinstance(daily_data, list) and daily_data:
+                    # This is a list of records
+                    power_values = [point.get('power', 0) for point in daily_data if point.get('power')]
+                    if power_values:
+                        analysis_result["efficiency_metrics"] = {
+                            "total_energy_today": sum(power_values),
+                            "peak_power": max(power_values),
+                            "average_power": sum(power_values) / len(power_values),
+                            "data_points": len(power_values)
+                        }
             
             result = {
                 "system_id": system_id,
@@ -709,19 +771,87 @@ async def get_daily_chart_data(
                 "analysis_type": analysis_type,
                 "timestamp": datetime.now().isoformat(),
                 "chart_data": analysis_result,
-                "data_resolution": "minute-level (when available)",
+                "data_resolution": "hour-level",
                 "metadata": {
                     "date_analyzed": target_date.isoformat(),
                     "analysis_type": analysis_type,
-                    "data_points": len(daily_data) if isinstance(daily_data, list) else "summary"
+                    "data_points": len(daily_data) if hasattr(daily_data, '__len__') else "summary"
                 }
             }
             
-            logger.info(f"Daily chart data retrieved for system ID: {system_id}, date: {target_date}")
+            logger.info(f"Daily chart data retrieved for Tigo system ID: {system_id}, date: {target_date}")
             return result
         
     except Exception as e:
         logger.error(f"Error getting daily chart data: {e}")
+        raise
+
+async def get_data_range(
+    system_id: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    granularity: str = "hour"
+) -> Dict[str, Any]:
+    """Get Tigo system data for a specific date range with configurable granularity."""
+    try:
+        client = initialize_tigo_client()
+        if not client:
+            raise Exception("Failed to initialize Tigo API client")
+        
+        if granularity not in ["minute", "hour", "day"]:
+            raise ValueError("Granularity must be 'minute', 'hour', or 'day'")
+        
+        with client:
+            if system_id is None:
+                systems = client.list_systems()
+                if not systems or not systems.get('systems'):
+                    raise Exception("No systems found for this account")
+                system_id = systems['systems'][0]['system_id']
+            
+            # Parse dates
+            if not start_date or not end_date:
+                raise ValueError("Both start_date and end_date are required")
+            
+            try:
+                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            except ValueError:
+                raise ValueError("Invalid date format. Use YYYY-MM-DD")
+            
+            if start_dt > end_dt:
+                raise ValueError("Start date must be before end date")
+            
+            # Calculate date range
+            date_diff = (end_dt - start_dt).days
+            
+            # Get data using the appropriate method
+            range_data = client.get_combined_data(
+                system_id,
+                start_dt.isoformat(),
+                end_dt.isoformat(),
+                level=granularity
+            )
+            
+            result = {
+                "system_id": system_id,
+                "start_date": start_date,
+                "end_date": end_date,
+                "granularity": granularity,
+                "days_span": date_diff,
+                "timestamp": datetime.now().isoformat(),
+                "data": safe_json_serialize(range_data),
+                "metadata": {
+                    "granularity": granularity,
+                    "period_days": date_diff,
+                    "data_points": len(range_data) if hasattr(range_data, '__len__') else "summary"
+                }
+            }
+            
+            logger.info(f"Data range retrieved for Tigo system ID: {system_id}, {start_date} to {end_date}")
+            return result
+        
+    except Exception as e:
+        logger.error(f"Error getting data range: {e}")
         raise
 
 async def main_async():
