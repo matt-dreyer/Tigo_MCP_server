@@ -273,7 +273,6 @@ async def get_tigo_configuration() -> Dict[str, Any]:
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
-        # REMOVED: with client: context manager
         user_info = client.get_user()
         systems_info = client.list_systems()
         
@@ -297,7 +296,6 @@ async def get_system_details(system_id: Optional[int] = None) -> Dict[str, Any]:
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
-        # REMOVED: with client: context manager
         if system_id is None:
             systems = client.list_systems()
             if not systems or not systems.get('systems'):
@@ -333,23 +331,39 @@ async def get_current_production(system_id: Optional[int] = None) -> Dict[str, A
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
-        # REMOVED: with client: context manager
         if system_id is None:
             systems = client.list_systems()
             if not systems or not systems.get('systems'):
                 raise Exception("No systems found for this account")
             system_id = systems['systems'][0]['system_id']
         
-        # Get current summary and today's data
+        # Get current summary
         summary_data = client.get_summary(system_id)
-        today_data = client.get_today_data(system_id)
+        
+        # Get today's data using date range method for today
+        today = datetime.now().date()
+        start_of_day = datetime.combine(today, datetime.min.time())
+        end_of_day = datetime.combine(today, datetime.max.time())
+        
+        try:
+            today_data = client.get_combined_data(
+                system_id,
+                start_of_day.isoformat(),
+                end_of_day.isoformat(),
+                level="hour"
+            )
+        except Exception as e:
+            logger.warning(f"Could not get today's detailed data: {e}")
+            # Fallback to just using date range data method
+            today_data = client.get_date_range_data(system_id, days_back=1, level="hour")
         
         result = {
             "system_id": system_id,
             "timestamp": datetime.now().isoformat(),
             "summary": safe_json_serialize(summary_data),
             "today_data": safe_json_serialize(today_data),
-            "data_points_today": len(today_data) if hasattr(today_data, '__len__') else 0
+            "data_points_today": len(today_data) if hasattr(today_data, '__len__') else 0,
+            "date": today.isoformat()
         }
         
         logger.info(f"Current production data retrieved for Tigo system ID: {system_id}")
@@ -369,7 +383,6 @@ async def get_performance_analysis(
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
-        # REMOVED: with client: context manager
         if system_id is None:
             systems = client.list_systems()
             if not systems or not systems.get('systems'):
@@ -379,17 +392,20 @@ async def get_performance_analysis(
         # Get efficiency analysis
         efficiency_data = client.calculate_system_efficiency(system_id, days_back=days_back)
         
-        # Get panel performance data
+        # Get panel performance data - this method may not exist, so handle gracefully
         try:
-            panel_performance = client.get_panel_performance(system_id, days_back=days_back)
-            panel_performance_data = safe_json_serialize(panel_performance)
+            # Since this method doesn't exist in the client, we'll skip it for now
+            panel_performance_data = []
+            logger.warning("Panel performance analysis not available - method not implemented in client")
         except Exception as e:
             logger.warning(f"Could not get panel performance: {e}")
             panel_performance_data = []
         
-        # Get underperforming panels
+        # Get underperforming panels - this method may not exist, so handle gracefully
         try:
-            underperforming = client.find_underperforming_panels(system_id, threshold_percent=85)
+            # Since this method doesn't exist in the client, we'll skip it for now
+            underperforming = []
+            logger.warning("Underperforming panel analysis not available - method not implemented in client")
         except Exception as e:
             logger.warning(f"Could not get underperforming panels: {e}")
             underperforming = []
@@ -429,18 +445,14 @@ async def get_historical_data(
         if level not in ["minute", "hour", "day"]:
             raise ValueError("Level must be 'minute', 'hour', or 'day'")
         
-        # REMOVED: with client: context manager
         if system_id is None:
             systems = client.list_systems()
             if not systems or not systems.get('systems'):
                 raise Exception("No systems found for this account")
             system_id = systems['systems'][0]['system_id']
         
-        # Get historical data using the safe date range method
-        if days_back == 1:
-            historical_data = client.get_today_data(system_id)
-        else:
-            historical_data = client.get_date_range_data(system_id, days_back, level)
+        # Get historical data using the available date range method
+        historical_data = client.get_date_range_data(system_id, days_back, level)
         
         result = {
             "system_id": system_id,
@@ -474,7 +486,6 @@ async def get_system_alerts(
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
-        # REMOVED: with client: context manager
         if system_id is None:
             systems = client.list_systems()
             if not systems or not systems.get('systems'):
@@ -528,7 +539,6 @@ async def get_system_health(system_id: Optional[int] = None) -> Dict[str, Any]:
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
-        # REMOVED: with client: context manager
         if system_id is None:
             systems = client.list_systems()
             if not systems or not systems.get('systems'):
@@ -611,7 +621,6 @@ async def get_maintenance_insights(
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
-        # REMOVED: with client: context manager
         if system_id is None:
             systems = client.list_systems()
             if not systems or not systems.get('systems'):
@@ -621,14 +630,8 @@ async def get_maintenance_insights(
         # Get efficiency analysis
         efficiency_data = client.calculate_system_efficiency(system_id, days_back=30)
         
-        # Get underperforming panels
-        try:
-            underperforming_panels = client.find_underperforming_panels(
-                system_id, 
-                threshold_percent=threshold_percent
-            )
-        except:
-            underperforming_panels = []
+        # Get underperforming panels - method doesn't exist, so skip for now
+        underperforming_panels = []
         
         # Get alerts count
         try:
@@ -711,7 +714,6 @@ async def get_daily_chart_data(
         if not client:
             raise Exception("Failed to initialize Tigo API client")
         
-        # REMOVED: with client: context manager
         if system_id is None:
             systems = client.list_systems()
             if not systems or not systems.get('systems'):
@@ -721,7 +723,8 @@ async def get_daily_chart_data(
         # Parse target date
         if date_text is None:
             target_date = datetime.now().date()
-            daily_data = client.get_today_data(system_id)
+            # Get today's data using date range method
+            daily_data = client.get_date_range_data(system_id, days_back=1, level="hour")
         else:
             try:
                 target_date = datetime.strptime(date_text, "%Y-%m-%d").date()
@@ -803,7 +806,6 @@ async def get_data_range(
         if granularity not in ["minute", "hour", "day"]:
             raise ValueError("Granularity must be 'minute', 'hour', or 'day'")
         
-        # REMOVED: with client: context manager
         if system_id is None:
             systems = client.list_systems()
             if not systems or not systems.get('systems'):
